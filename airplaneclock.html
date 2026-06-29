@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Airplane Clock</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #0c0f12; 
+            color: #fff;
+            font-family: 'Arial', sans-serif;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* --- SETTINGS GEAR & MENU --- */
+        .settings-gear {
+            position: fixed;
+            top: 25px;
+            left: 25px;
+            font-size: 2.5rem;
+            cursor: pointer;
+            z-index: 100;
+            user-select: none;
+            transition: transform 0.4s ease;
+            opacity: 0.7;
+        }
+
+        .settings-gear:hover {
+            transform: rotate(60deg);
+            opacity: 1;
+        }
+
+        .settings-menu {
+            position: fixed;
+            top: 80px;
+            left: 25px;
+            background: rgba(15, 20, 25, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 20px;
+            z-index: 99;
+            display: none;
+            flex-direction: column;
+            gap: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.7);
+            backdrop-filter: blur(8px);
+            min-width: 250px;
+            box-sizing: border-box;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .settings-menu.open {
+            display: flex;
+        }
+
+        .settings-menu h3 {
+            margin: 0 0 5px 0;
+            font-size: 1.2rem;
+            color: #8a99a8;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 8px;
+        }
+
+        .settings-option {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.95rem;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .settings-option input[type="checkbox"] {
+            cursor: pointer;
+            width: 18px;
+            height: 18px;
+            accent-color: #3a86ff;
+        }
+
+        .settings-option select,
+        .manual-time-picker select {
+            background: #1c232b;
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            padding: 4px 8px;
+            cursor: pointer;
+            outline: none;
+            font-size: 0.9rem;
+        }
+
+        .settings-option select {
+            max-width: 130px;
+        }
+
+        /* --- MANUAL TIME CONFIG PANEL --- */
+        .manual-time-picker {
+            display: none;
+            background: rgba(255, 255, 255, 0.04);
+            border-radius: 8px;
+            padding: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .manual-time-picker.active {
+            display: flex;
+        }
+
+        .manual-time-controls {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .manual-time-controls span {
+            font-weight: bold;
+            color: #8a99a8;
+        }
+
+        /* --- PICTURE VIEWPORT (TOP 82%) --- */
+        .plane-wrapper {
+            position: relative;
+            width: 100vw;
+            height: 82vh; 
+            overflow: hidden;
+            background-color: #050709;
+            display: flex; 
+            justify-content: center;
+            align-items: center;
+            gap: 12px; 
+            padding: 10px;
+            box-sizing: border-box;
+            transition: opacity 0.6s ease-in-out, transform 0.6s ease-in-out;
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        .plane-wrapper.changing {
+            opacity: 0;
+            transform: scale(0.99);
+        }
+
+        .plane-pane {
+            flex: 1 1 0;
+            height: 100%;
+            max-width: 100%;
+            background-size: contain; 
+            background-repeat: no-repeat;
+            background-position: center;
+            transition: background-image 0.3s ease, filter 0.3s ease;
+            animation: slowZoom 16s ease-in-out infinite;
+        }
+
+        .plane-wrapper.auto-dim-active .plane-pane {
+            filter: brightness(0.5) contrast(1.15);
+        }
+
+        /* Override to fill screen if option is active and there's only one image */
+        .plane-wrapper.fit-cover .plane-pane {
+            background-size: cover;
+        }
+
+        /* --- THE COMPACT DASHBOARD BAR (BOTTOM 18%) --- */
+        .dashboard-bar {
+            width: 100vw;
+            height: 18vh;
+            background-color: #0f1318;
+            border-top: 2px solid #1c232b;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 50px;
+            box-sizing: border-box;
+            z-index: 10;
+            transition: background-color 0.3s ease;
+            
+            font-variant-numeric: tabular-nums;
+            -webkit-font-feature-settings: "tnum";
+            font-feature-settings: "tnum";
+        }
+
+        /* --- DATE BAR POSITIONING --- */
+        #date-wrapper {
+            display: flex;
+            align-items: center;
+        }
+
+        #date-display {
+            font-size: 3rem; 
+            font-weight: bold;
+            color: #cbd5e1; 
+            letter-spacing: 1px;
+            transition: color 0.3s ease;
+            display: inline-block;
+        }
+
+        /* --- CLOCK DESIGN MATRICES --- */
+        #clock {
+            display: flex;
+            align-items: center;
+            font-size: 6.5rem; 
+            font-weight: bold;
+            height: 100%; 
+            color: #ffffff;
+            transition: color 0.3s ease;
+        }
+
+        /* --- THEME SELECTOR CONFIGS --- */
+        .dashboard-bar.dim-active {
+            background-color: #06080a;
+            border-top-color: #0f1317;
+        }
+        .dashboard-bar.dim-active #clock {
+            color: #687786; 
+        }
+        .dashboard-bar.dim-active .sec-box, 
+        .dashboard-bar.dim-active .ampm-box {
+            color: #3f4a56; 
+        }
+        .dashboard-bar.dim-active #date-display {
+            color: #8a99a8; 
+        }
+
+        /* --- STAGGERED WAVE CONTROLLERS --- */
+        .wave-node {
+            display: flex;
+            align-items: center;
+            animation-delay: var(--wave-delay, 0s) !important;
+        }
+        
+        .animate-wave {
+            animation: waveFloat 3s ease-in-out infinite;
+        }
+
+        .wave-date-active #date-display {
+            animation: waveFloat 3s ease-in-out infinite;
+        }
+
+        .separator {
+            display: block;
+            line-height: 7.8rem;
+            height: 7.8rem;
+            padding: 0 0.3rem;
+        }
+
+        .digit-box {
+            display: block;
+            height: 7.8rem;
+            overflow: hidden;
+            position: relative;
+            text-align: center;
+            box-sizing: border-box;
+            padding: 0 0.1rem;
+        }
+
+        .sec-box {
+            height: 5rem;
+            font-size: 4rem;
+            color: #5c6b7a;
+            transition: color 0.3s ease;
+        }
+
+        .ampm-box {
+            font-size: 2.8rem;
+            color: #5c6b7a;
+            margin-left: 12px;
+            align-self: center;
+            transition: color 0.3s ease;
+        }
+
+        .digit-strip {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            width: 100%;
+        }
+
+        .digit-strip span {
+            height: 7.8rem;
+            display: block;
+            line-height: 7.8rem;
+        }
+
+        .sec-box .digit-strip span {
+            height: 5rem;
+            display: block;
+            line-height: 5rem;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        @keyframes waveFloat {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-12px); }
+            100% { transform: translateY(0px); }
+        }
+
+        @keyframes slowZoom {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.04); }
+            100% { transform: scale(1); }
+        }
+    </style>
+</head>
+<body class="fit-cover">
+
+    <div class="settings-gear" id="gear-btn">⚙</div>
+    <div class="settings-menu" id="settings-menu">
+        <h3>Clock Options</h3>
+        <label class="settings-option">
+            <span>Tactical Dim Modes</span>
+            <input type="checkbox" id="pref-dim">
+        </label>
+        <label class="settings-option">
+            <span>Wave Time Display</span>
+            <input type="checkbox" id="pref-wave-time" checked>
+        </label>
+        <label class="settings-option">
+            <span>Wave Date Display</span>
+            <input type="checkbox" id="pref-wave-date">
+        </label>
+        <label class="settings-option">
+            <span>Font Style</span>
+            <select id="pref-font">
+                <option value="Arial, sans-serif">Arial</option>
+                <option value="'Courier New', monospace">Courier New</option>
+                <option value="'Times New Roman', serif">Times New Roman</option>
+                <option value="Impact, Charcoal, sans-serif">Impact</option>
+                <option value="'Trebuchet MS', sans-serif">Trebuchet MS</option>
+                <option value="Georgia, serif">Georgia</option>
+                <option value="'Lucida Console', monospace">Lucida Console</option>
+                <option value="Verdana, sans-serif">Verdana</option>
+                <option value="'Comic Sans MS', cursive">Comic Sans</option>
+                <option value="Garamond, serif">Garamond</option>
+            </select>
+        </label>
+        <label class="settings-option">
+            <span>12-Hour Format</span>
+            <input type="checkbox" id="pref-12h" checked>
+        </label>
+        <label class="settings-option">
+            <span>Show Seconds</span>
+            <input type="checkbox" id="pref-seconds" checked>
+        </label>
+        <label class="settings-option">
+            <span>Fill Screen (Cover)</span>
+            <input type="checkbox" id="pref-cover" checked>
+        </label>
+        
+        <label class="settings-option">
+            <span>Time Source</span>
+            <select id="pref-source">
+                <option value="device">Device Time</option>
+                <option value="manual">Manual Time</option>
+            </select>
+        </label>
+
+        <div class="manual-time-picker" id="manual-picker-panel">
+            <div class="manual-time-controls">
+                <select id="manual-hours">
+                    </select>
+                <span>:</span>
+                <select id="manual-minutes">
+                    </select>
+                <select id="manual-ampm">
+                    <option value="AM">AM</option>
+                    <option value="PM">PM</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <div class="plane-wrapper fit-cover" id="display-wrapper">
+        <div class="plane-pane" id="pane-1"></div>
+    </div>
+
+    <div class="dashboard-bar" id="dash-bar">
+        <div id="date-wrapper">
+            <div id="date-display">Mon, Oct 14</div>
+        </div>
+
+        <div id="clock">
+            <div class="wave-node animate-wave" style="--wave-delay: 0.00s;"><div class="digit-box"><div class="digit-strip" id="h1"><span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span></div></div></div>
+            <div class="wave-node animate-wave" style="--wave-delay: 0.15s;"><div class="digit-box"><div class="digit-strip" id="h2"><span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span></div></div></div>
+            
+            <div class="wave-node animate-wave" style="--wave-delay: 0.30s;"><div class="separator">:</div></div>
+            
+            <div class="wave-node animate-wave" style="--wave-delay: 0.45s;"><div class="digit-box"><div class="digit-strip" id="m1"><span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span></div></div></div>
+            <div class="wave-node animate-wave" style="--wave-delay: 0.60s;"><div class="digit-box"><div class="digit-strip" id="m2"><span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span></div></div></div>
+            
+            <div class="wave-node sec-element animate-wave" style="--wave-delay: 0.75s;"><div class="separator">:</div></div>
+            
+            <div class="wave-node sec-element animate-wave" style="--wave-delay: 0.90s;"><div class="digit-box sec-box"><div class="digit-strip" id="s1"><span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span></div></div></div>
+            <div class="wave-node sec-element animate-wave" style="--wave-delay: 1.05s;"><div class="digit-box sec-box"><div class="digit-strip" id="s2"><span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span></div></div></div>
+
+            <div class="wave-node animate-wave" id="ampm-node" style="--wave-delay: 1.20s;"><div class="ampm-box" id="ampm-text">AM</div></div>
+        </div>
+    </div>
+
+    <script>
+        let use12Hour = true; 
+        let showSeconds = true;
+        let fillScreen = true;
+        let currentLoadedKey = ""; 
+
+        // Manual clock mechanics variables
+        let timeSource = "device"; // "device" or "manual"
+        let manualTimeMs = 0; // Epoch milliseconds anchor for manual clock calculations
+        let lastTickTime = Date.now(); // Anchor tracking exact execution deltas
+
+        const duplicatePlanes = {
+            "0800": 2, 
+            "0900": 2,
+            "1000": 2,
+            "0100": 2,
+            "0114": 2,
+            "0135": 2,
+            "0140": 2,
+            "0145": 2,
+            "0300": 2,
+            "0340": 2,
+            "0400": 2,
+            "0500": 2,
+            "0550": 2,
+            "0600": 2
+        };
+
+        const gearBtn = document.getElementById('gear-btn');
+        const settingsMenu = document.getElementById('settings-menu');
+        const prefDim = document.getElementById('pref-dim');
+        const prefWaveTime = document.getElementById('pref-wave-time');
+        const prefWaveDate = document.getElementById('pref-wave-date');
+        const prefFont = document.getElementById('pref-font');
+        const pref12h = document.getElementById('pref-12h');
+        const prefSeconds = document.getElementById('pref-seconds');
+        const prefCover = document.getElementById('pref-cover');
+        const prefSource = document.getElementById('pref-source');
+        const manualPickerPanel = document.getElementById('manual-picker-panel');
+        const displayWrapper = document.getElementById('display-wrapper');
+        const dashBar = document.getElementById('dash-bar');
+
+        const manualHoursSelect = document.getElementById('manual-hours');
+        const manualMinutesSelect = document.getElementById('manual-minutes');
+        const manualAmpmSelect = document.getElementById('manual-ampm');
+
+        // Populate Custom Manual Time Picker Dropdown Options
+        for (let i = 1; i <= 12; i++) {
+            let opt = document.createElement('option');
+            opt.value = i; opt.innerText = String(i).padStart(2, '0');
+            manualHoursSelect.appendChild(opt);
+        }
+        for (let i = 0; i < 60; i++) {
+            let opt = document.createElement('option');
+            opt.value = i; opt.innerText = String(i).padStart(2, '0');
+            manualMinutesSelect.appendChild(opt);
+        }
+
+        // Initialize Manual Select Values to Current Device Time upon creation
+        const initTime = new Date();
+        let initHr = initTime.getHours();
+        manualAmpmSelect.value = initHr >= 12 ? "PM" : "AM";
+        manualHoursSelect.value = initHr % 12 || 12;
+        manualMinutesSelect.value = initTime.getMinutes();
+        syncManualTimestamp();
+
+        gearBtn.addEventListener('click', () => settingsMenu.classList.toggle('open'));
+        document.addEventListener('click', (e) => {
+            if (!settingsMenu.contains(e.target) && e.target !== gearBtn) {
+                settingsMenu.classList.remove('open');
+            }
+        });
+
+        prefDim.addEventListener('change', (e) => {
+            const active = e.target.checked;
+            dashBar.classList.toggle('dim-active', active);
+            displayWrapper.classList.toggle('auto-dim-active', active);
+        });
+
+        prefWaveTime.addEventListener('change', (e) => {
+            const nodes = document.querySelectorAll('.wave-node');
+            nodes.forEach(node => {
+                node.classList.remove('animate-wave');
+                if (e.target.checked) {
+                    void node.offsetWidth; 
+                    node.classList.add('animate-wave');
+                }
+            });
+        });
+
+        prefWaveDate.addEventListener('change', (e) => {
+            dashBar.classList.toggle('wave-date-active', e.target.checked);
+        });
+
+        prefFont.addEventListener('change', (e) => {
+            dashBar.style.fontFamily = e.target.value;
+        });
+
+        pref12h.addEventListener('change', (e) => { use12Hour = e.target.checked; updateClock(); });
+        prefSeconds.addEventListener('change', (e) => {
+            showSeconds = e.target.checked;
+            document.querySelectorAll('.sec-element').forEach(el => el.classList.toggle('hidden', !showSeconds));
+            updateClock();
+        });
+        prefCover.addEventListener('change', (e) => {
+            fillScreen = e.target.checked;
+            updateCoverClass();
+        });
+
+        // Time Source Change Handler
+        prefSource.addEventListener('change', (e) => {
+            timeSource = e.target.value;
+            if (timeSource === "manual") {
+                manualPickerPanel.classList.add('active');
+                syncManualTimestamp();
+            } else {
+                manualPickerPanel.classList.remove('active');
+            }
+            updateClock();
+        });
+
+        // Sync Time calculation anchor immediately when selectors alter
+        [manualHoursSelect, manualMinutesSelect, manualAmpmSelect].forEach(select => {
+            select.addEventListener('change', () => {
+                syncManualTimestamp();
+                updateClock();
+            });
+        });
+
+        function syncManualTimestamp() {
+            const baseDate = new Date(); // Use today's calendar matrix date context
+            let hr = parseInt(manualHoursSelect.value, 10);
+            const min = parseInt(manualMinutesSelect.value, 10);
+            const ampm = manualAmpmSelect.value;
+            
+            if (ampm === "PM" && hr < 12) hr += 12;
+            if (ampm === "AM" && hr === 12) hr = 0;
+            
+            baseDate.setHours(hr, min, 0, 0);
+            manualTimeMs = baseDate.getTime();
+            lastTickTime = Date.now();
+        }
+
+        function updateCoverClass() {
+            const count = duplicatePlanes[currentLoadedKey] || 1;
+            if (fillScreen && count === 1) {
+                displayWrapper.classList.add('fit-cover');
+            } else {
+                displayWrapper.classList.remove('fit-cover');
+            }
+        }
+
+        function setDigit(stripId, value, isSecond = false) {
+            const strip = document.getElementById(stripId);
+            if (!strip) return;
+            const height = isSecond ? 5 : 7.8; 
+            strip.style.transform = `translateY(-${value * height}rem)`;
+        }
+
+        function updateClock(isInitialLoad = false) {
+            const currentTime = Date.now();
+            const elapsed = currentTime - lastTickTime;
+            lastTickTime = currentTime;
+
+            let now;
+            if (timeSource === "device") {
+                now = new Date();
+            } else {
+                // Advance manual clock forward linearly using real millisecond deltas
+                manualTimeMs += elapsed;
+                now = new Date(manualTimeMs);
+            }
+
+            const dateOptions = { weekday: 'short', month: 'short', day: 'numeric' };
+            document.getElementById('date-display').innerText = now.toLocaleDateString('en-US', dateOptions);
+
+            let hours = now.getHours();
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            
+            const ampmNode = document.getElementById('ampm-node');
+            if (use12Hour) {
+                ampmNode.classList.remove('hidden');
+                document.getElementById('ampm-text').innerText = hours >= 12 ? "PM" : "AM";
+            } else {
+                ampmNode.classList.add('hidden');
+            }
+
+            let displayHours = use12Hour ? (hours % 12 || 12) : hours;
+            displayHours = String(displayHours).padStart(2, '0');
+
+            setDigit('h1', displayHours[0]);
+            setDigit('h2', displayHours[1]);
+            setDigit('m1', minutes[0]);
+            setDigit('m2', minutes[1]);
+            
+            if (showSeconds) {
+                setDigit('s1', seconds[0], true);
+                setDigit('s2', seconds[1], true);
+            }
+
+            const targetTimeString = `${displayHours}${minutes}`;
+            findAndRenderTarget(targetTimeString, isInitialLoad);
+        }
+
+        function checkImageExists(path) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => resolve(true);
+                img.onerror = () => resolve(false);
+                img.src = path;
+            });
+        }
+
+        async function findAndRenderTarget(startTimeKey, isInitialLoad) {
+            let currentVal = parseInt(startTimeKey, 10);
+            let foundKey = "";
+
+            for (let i = 0; i < 1440; i++) {
+                let checkHours = Math.floor(currentVal / 100);
+                let checkMinutes = currentVal % 100;
+
+                if (checkMinutes < 0) {
+                    checkHours--;
+                    checkMinutes = 59;
+                }
+                if (checkHours < 1) {
+                    checkHours = use12Hour ? 12 : 23;
+                }
+
+                currentVal = (checkHours * 100) + checkMinutes;
+                let checkKey = String(currentVal).padStart(4, '0');
+
+                const count = duplicatePlanes[checkKey] || 1;
+                const pathToCheck = count > 1 ? `images/${checkKey}_1.jpg` : `images/${checkKey}.jpg`;
+
+                let exists = await checkImageExists(pathToCheck);
+                if (exists) {
+                    foundKey = checkKey;
+                    break;
+                }
+                currentVal--; 
+            }
+
+            if (foundKey && foundKey !== currentLoadedKey) {
+                currentLoadedKey = foundKey;
+                renderImages(foundKey, isInitialLoad);
+            } else if (!foundKey) {
+                document.getElementById('display-wrapper').innerHTML = '<div class="plane-pane"></div>';
+                currentLoadedKey = "";
+            }
+        }
+
+        function renderImages(timeString, isInitialLoad) {
+            const wrapper = document.getElementById('display-wrapper');
+            const count = duplicatePlanes[timeString] || 1;
+
+            const buildPanes = () => {
+                wrapper.innerHTML = ""; 
+                for (let i = 1; i <= count; i++) {
+                    const pane = document.createElement('div');
+                    pane.className = "plane-pane";
+                    const imgPath = count > 1 ? `images/${timeString}_${i}.jpg` : `images/${timeString}.jpg`;
+                    pane.style.backgroundImage = `url('${imgPath}')`;
+                    wrapper.appendChild(pane);
+                }
+                updateCoverClass();
+            };
+
+            if (isInitialLoad) {
+                buildPanes();
+            } else {
+                wrapper.classList.add('changing');
+                setTimeout(() => {
+                    buildPanes();
+                    wrapper.classList.remove('changing');
+                }, 600);
+            }
+        }
+
+        updateClock(true);
+        setInterval(() => updateClock(false), 1000);
+    </script>
+</body>
+</html>
